@@ -140,7 +140,7 @@ function calculateLayout() {
     margin: margin,
     gap: gap,
     columns: columns,
-    targetTop: targetTop
+    targetTop: targetTop,
     targetHeight: width < 650 ? mobileTargetHeight : 118,
     cardWidth: width < 650 ? mobileCardWidth : cardWidth,
     cardHeight: cardHeight,
