@@ -126,22 +126,28 @@ function calculateLayout() {
   const columns = width < 650 ? 2 : 6;
   // 計算手機版的卡片寬度。
   const mobileCardWidth = (width - margin * 2 - gap) / 2;
+  // 依照手機高度縮放圖示區，避免小螢幕上下區塊重疊。
+  const mobileTargetHeight = constrain(height * 0.105, 58, 82);
+  // 設定手機版題目圖示的起始位置，避開上方標題與進度文字。
+  const targetTop = width < 650 ? 105 : (height < 620 ? 112 : 145);
+  // 計算手機版文字卡片可使用的高度，確保底部按鈕仍有空間。
+  const mobileCardsTop = targetTop + mobileTargetHeight * 3 + gap * 2 + 16;
+  const mobileCardHeight = constrain((height - mobileCardsTop - 78 - gap * 2) / 3, 42, 58);
   // 計算卡片高度並限制在可讀的範圍內。
-  const cardHeight = width < 650 ? 58 : constrain(height * 0.09, 62, 84);
+  const cardHeight = width < 650 ? mobileCardHeight : constrain(height * 0.09, 62, 84);
   // 設定標題區與上方圖示區的位置。
   layout = {
     margin: margin,
     gap: gap,
     columns: columns,
-    targetTop: height < 620 ? 112 : 145,
-    targetHeight: width < 650 ? 88 : 118,
+    targetTop: targetTop
+    targetHeight: width < 650 ? mobileTargetHeight : 118,
     cardWidth: width < 650 ? mobileCardWidth : cardWidth,
     cardHeight: cardHeight,
-    // 將文字選項下移，避免作答時遮住上方題目圖示。
-    cardsTop: height < 620 ? 330 : height * 0.64
+    // 將文字選項放在三排題目圖示下方，並保留清楚間距。
+    cardsTop: width < 620 ? mobileCardsTop : height * 0.64
   };
-  // 限制小螢幕上的文字卡片起始位置，避免與頁尾按鈕重疊。
-  layout.cardsTop = min(layout.cardsTop, height - (layout.cardHeight * 3 + 105));
+
   // 計算交卷按鈕的互動範圍。
   submitButton = { x: width - margin - 148, y: height - 58, w: 148, h: 42 };
   // 計算重新開始按鈕的互動範圍。
