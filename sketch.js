@@ -126,13 +126,14 @@ function calculateLayout() {
   const columns = width < 650 ? 2 : 6;
   // 計算手機版的卡片寬度。
   const mobileCardWidth = (width - margin * 2 - gap) / 2;
-  // 依照手機高度縮放圖示區，避免小螢幕上下區塊重疊。
-  const mobileTargetHeight = constrain(height * 0.105, 58, 82);
+   // 讓手機題目框有足夠高度同時容納圖示與已放置的答案卡。
+  const mobileTargetHeight = constrain(height * 0.13, 86, 112);
   // 設定手機版題目圖示的起始位置，避開上方標題與進度文字。
   const targetTop = width < 650 ? 105 : (height < 620 ? 112 : 145);
-  // 計算手機版文字卡片可使用的高度，確保底部按鈕仍有空間。
-  const mobileCardsTop = targetTop + mobileTargetHeight * 3 + gap * 2 + 16;
-  const mobileCardHeight = constrain((height - mobileCardsTop - 78 - gap * 2) / 3, 42, 58);
+ // 計算手機版文字卡片起始位置，放在三排題目框完全下方。
+  const mobileCardsTop = targetTop + mobileTargetHeight * 3 + gap * 2 + 20;
+  // 依照手機高度限制文字卡片高度，保留底部按鈕空間。
+  const mobileCardHeight = constrain(height * 0.065, 42, 56);
   // 計算卡片高度並限制在可讀的範圍內。
   const cardHeight = width < 650 ? mobileCardHeight : constrain(height * 0.09, 62, 84);
   // 設定標題區與上方圖示區的位置。
@@ -394,7 +395,9 @@ function drawTargets() {
     // 依照不同題目設定不同的動畫節奏，讓六個圖示各有特色。
     const animationTime = frameCount * (0.045 + i * 0.006) + i * 1.7;
     const iconX = x + target.w / 2 + sin(animationTime) * (i % 2 === 0 ? 3 : 6);
-    const iconY = y + target.h * 0.39 + cos(animationTime * 1.35) * (5 + (i % 3) * 2);
+     // 已放置答案時將圖示上移，讓答案卡可放在同一個題目框下方。
+    const iconYRatio = target.cardId === null || layout.columns !== 2 ? 0.39 : 0.24;
+    const iconY = y + target.h * iconYRatio + cos(animationTime * 1.35) * (5 + (i % 3) * 2);
     const iconAngle = i % 3 === 0 ? sin(animationTime) * 0.12 : (i % 3 === 1 ? sin(animationTime) * 0.22 : 0);
     const iconScale = 1 + sin(animationTime * 1.6) * 0.08;
     // 使用獨立繪圖狀態，避免圖示動畫影響其他介面元件。
@@ -409,13 +412,14 @@ function drawTargets() {
     drawTargetIcon(questions[i].iconType, width < 650 ? 29 : 38);
     // 還原圖示專用的繪圖狀態。
     pop();
-    // 顯示題目編號，協助使用者辨認位置。
+  // 顯示題目編號，手機已放置答案時避免與答案卡文字重疊。
+    if (target.cardId === null || layout.columns !== 2) {
     textSize(11);
     fill("#000000");
     text(`第 ${i + 1} 題`, x + target.w / 2, y + target.h - 14);
   }
 }
-
+}
 // 使用 p5.js 圖形繪製六個固定可顯示的題目圖示。
 function drawTargetIcon(iconIndex, iconSize) {
   // 將圖示大小標準化，讓不同螢幕的圖示比例一致。
@@ -799,11 +803,16 @@ function mousePressed() {
     return false;
   }
   // 點擊上方圖片時播放該題的親切語音說明。
+   // 手機版答案卡會位於題目框內，先確認是否點擊了已放置卡片。
+  const clickedPlacedCard = cards.some((card) =>
+    card.placed
+    && isInside(mouseX, mouseY, { x: card.x, y: card.y, w: layout.cardWidth, h: layout.cardHeight })
+  );
   for (let i = 0; i < targets.length; i += 1) {
     // 取得目前圖片的互動區域。
     const target = targets[i];
     // 判斷滑鼠是否按在目前圖片區域內。
-    if (isInside(mouseX, mouseY, target)) {
+ if (isInside(mouseX, mouseY, target) && !clickedPlacedCard) {
       // 播放目前題目的語音提示。
       speakQuestion(i);
       // 點擊圖片只播放語音，不啟動文字卡片拖曳。
@@ -941,16 +950,18 @@ function mouseReleased() {
     if (displacedCard && dragOriginTargetIndex !== null) {
       const originTarget = targets.find((target) => target.index === dragOriginTargetIndex);
       if (originTarget) {
-        displacedCard.x = originTarget.x + 5;
-        displacedCard.y = originTarget.y + originTarget.h + 6;
+        const originPosition = getTargetCardPosition(originTarget);
+        displacedCard.x = originPosition.x;
+        displacedCard.y = originPosition.y;
         displacedCard.placed = true;
         displacedCard.targetIndex = originTarget.index;
         originTarget.cardId = displacedCard.id;
       }
     }
     // 將卡片吸附到答案位置下方。
-    draggingCard.x = matchedTarget.x + 5;
-    draggingCard.y = matchedTarget.y + matchedTarget.h + 6;
+      const matchedPosition = getTargetCardPosition(matchedTarget);
+    draggingCard.x = matchedPosition.x;
+    draggingCard.y = matchedPosition.y;
     // 將卡片標記為已放置，正誤留到交卷時才判定。
     draggingCard.placed = true;
     // 記錄卡片目前放入的答案位置。
@@ -966,8 +977,9 @@ function mouseReleased() {
     if (dragOriginTargetIndex !== null) {
       const originTarget = targets.find((target) => target.index === dragOriginTargetIndex);
       if (originTarget) {
-        draggingCard.x = originTarget.x + 5;
-        draggingCard.y = originTarget.y + originTarget.h + 6;
+       const originPosition = getTargetCardPosition(originTarget);
+        draggingCard.x = originPosition.x;
+        draggingCard.y = originPosition.y;
         draggingCard.placed = true;
         draggingCard.targetIndex = dragOriginTargetIndex;
         originTarget.cardId = draggingCard.id;
@@ -1018,7 +1030,21 @@ function overlaps(card, target) {
   // 回傳卡片中心是否位於答案區域內。
   return isInside(centerX, centerY, target);
 }
-
+// 計算答案卡在題目框中的位置，避免手機版遮住下一題。
+function getTargetCardPosition(target) {
+  // 手機版將答案卡放在題目框下半部。
+  if (layout.columns === 2) {
+    return {
+      x: target.x + 5,
+      y: target.y + target.h - layout.cardHeight - 4
+    };
+  }
+  // 桌面版維持答案卡位於題目框下方的配置。
+  return {
+    x: target.x + 5,
+    y: target.y + target.h + 6
+  };
+}
 // 計算成績並顯示結果視窗。
 function submitGame() {
   // 設定遊戲為已交卷狀態。
